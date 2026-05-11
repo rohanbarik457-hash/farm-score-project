@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Farm Score</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header>
+    <div class="logo">🌾 FarmScore</div>
+    <p class="tagline">Evaluate your farm's sustainability &amp; productivity</p>
+  </header>
+
+  <main>
+    <!-- ── Input Form ─────────────────────────────────────── -->
+    <section class="card" id="form-section">
+      <h2>Farm Details</h2>
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="farm_name">Farm Name</label>
+          <input type="text" id="farm_name" placeholder="e.g. Green Valley Farm" />
+        </div>
+
+        <div class="field">
+          <label for="crop_type">Crop Type</label>
+          <input type="text" id="crop_type" placeholder="e.g. wheat, maize, vegetables" />
+        </div>
+
+        <div class="field">
+          <label for="area_hectares">Area (hectares)</label>
+          <input type="number" id="area_hectares" placeholder="e.g. 50" min="0" />
+        </div>
+
+        <div class="field">
+          <label for="irrigation_type">Irrigation Type</label>
+          <select id="irrigation_type">
+            <option value="">— Select —</option>
+            <option value="drip">Drip</option>
+            <option value="sprinkler">Sprinkler</option>
+            <option value="rainfed">Rainfed</option>
+            <option value="flood">Flood</option>
+          </select>
+        </div>
+
+        <div class="field slider-field">
+          <label for="soil_health">Soil Health <span class="val" id="soil_val">5</span>/10</label>
+          <input type="range" id="soil_health" min="0" max="10" value="5" step="0.5" />
+        </div>
+
+        <div class="field slider-field">
+          <label for="water_usage_efficiency">Water Efficiency <span class="val" id="water_val">5</span>/10</label>
+          <input type="range" id="water_usage_efficiency" min="0" max="10" value="5" step="0.5" />
+        </div>
+
+        <div class="field slider-field">
+          <label for="biodiversity_score">Biodiversity <span class="val" id="bio_val">5</span>/10</label>
+          <input type="range" id="biodiversity_score" min="0" max="10" value="5" step="0.5" />
+        </div>
+      </div>
+
+      <button id="submit-btn" onclick="submitFarm()">Calculate Score</button>
+      <p id="error-msg" class="error hidden"></p>
+    </section>
+
+    <!-- ── Results ────────────────────────────────────────── -->
+    <section class="card hidden" id="result-section">
+      <h2>Score Results</h2>
+
+      <div class="score-hero">
+        <div class="grade-badge" id="grade-badge">—</div>
+        <div class="score-total">
+          <span id="total-score">—</span>
+          <small>/ 100</small>
+        </div>
+        <div class="farm-label" id="result-farm-name"></div>
+      </div>
+
+      <div class="breakdown" id="breakdown"></div>
+
+      <div class="recommendations" id="recommendations">
+        <h3>Recommendations</h3>
+        <ul id="rec-list"></ul>
+      </div>
+
+      <button class="secondary" onclick="resetForm()">Score Another Farm</button>
+    </section>
+  </main>
+
+  <footer>
+    <p>Farm Score Project &mdash; open source &amp; free to use</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
