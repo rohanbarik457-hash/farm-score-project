@@ -2,9 +2,8 @@ async function calculateScore() {
 
     const lat = document.getElementById("lat").value;
     const lon = document.getElementById("lon").value;
-
-    const response = await fetch(
-        "https://farm-score-project.onrender.com",
+const response = await fetch(
+    "https://farm-score-project.onrender.com/calculate",
         {
             method: "POST",
             headers: {
