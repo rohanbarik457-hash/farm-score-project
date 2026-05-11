@@ -4,7 +4,7 @@ async function calculateScore() {
     const lon = document.getElementById("lon").value;
 
     const response = await fetch(
-        "https://farm-score-project.onrender.com/",
+        "https://farm-score-project.onrender.com",
         {
             method: "POST",
             headers: {
