@@ -587,7 +587,7 @@ function computeWeightedScore(gw, ndvi, ndmi, rainfall, temperature) {
   const TempScore = Math.max(0, Math.min(100, 100 - 100 * Math.abs(40 - T) / 40));
 
   // Weighted average
-  const WeightedAvg = (10*GW + 30*NDVI_score + 25*NDMI_score + 10*RainfallScore + 25*TempScore) / 100 * 10;
+  const WeightedAvg = (10*GW + 30*NDVI_score + 25*NDMI_score + 10*RainfallScore + 25*TempScore) / 100;
   const FinalScore = Math.round(WeightedAvg) + 150;
 
   return {
