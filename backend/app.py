@@ -21,7 +21,10 @@ score_store: dict = {}
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+    return jsonify({
+        "message": "FarmScore API is running",
+        "status": "ok"
+    })
 
 
 @app.post("/score")
