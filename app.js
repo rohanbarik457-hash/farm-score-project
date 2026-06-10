@@ -3,7 +3,7 @@
  * Frontend logic for Farm Score Project.
  */
 
-const API_BASE = "http://localhost:5000";
+const API_BASE = "https://farm-score-project.onrender.com/";
 
 // ── Slider live-update ──────────────────────────────────────
 const sliders = [
