@@ -36,7 +36,7 @@ from scoring import calculate_score
 load_dotenv()
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-PORT = int(os.getenv("PORT", 5000))
+PORT = int(os.getenv("PORT", 10000))
 HOST = os.getenv("HOST", "0.0.0.0")
 DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
 
