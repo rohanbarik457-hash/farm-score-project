@@ -1,91 +1,197 @@
 """
 app.py
-Flask REST API for the Farm Score Project.
+======
+Flask REST API for the FarmScore agricultural-suitability platform.
+
+Endpoints
+---------
+POST /calculate
+    Accept ``{"lat": float, "lng": float}``, query Google Earth Engine
+    for satellite data, compute the FarmScore, and return the result.
+
+GET /health
+    Lightweight health-check for load-balancers / uptime monitors.
 """
 
-import uuid
-from flask import Flask, request, jsonify, render_template
+from __future__ import annotations
+
+import logging
+import os
+import sys
+import time
+
+from dotenv import load_dotenv
+from flask import Flask, jsonify, request
 from flask_cors import CORS
-from farmscore import calculate_score
 
+# ---------------------------------------------------------------------------
+# Local modules
+# ---------------------------------------------------------------------------
+from earth_engine_service import fetch_farm_data, initialise_earth_engine
+from scoring import calculate_score
+
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
+load_dotenv()
+
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+PORT = int(os.getenv("PORT", 5000))
+HOST = os.getenv("HOST", "0.0.0.0")
+DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=LOG_LEVEL,
+    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    stream=sys.stdout,
+)
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Flask app
+# ---------------------------------------------------------------------------
 app = Flask(__name__)
-CORS(app)  # Allow requests from the frontend
-
-# In-memory store for scores (replace with a database for production)
-score_store: dict = {}
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 
 # ---------------------------------------------------------------------------
+# Eagerly initialise Earth Engine at startup
+# ---------------------------------------------------------------------------
+@app.before_request
+def _ensure_ee_init():
+    """Guarantee Earth Engine is initialised before the first request."""
+    try:
+        initialise_earth_engine()
+    except Exception as exc:
+        logger.error("Earth Engine init failed: %s", exc)
+        # Allow health-check to still respond
+        if request.endpoint != "health_check":
+            raise
+
+
+# ===================================================================
 # Routes
-# ---------------------------------------------------------------------------
+# ===================================================================
 
-@app.route("/")
-def home():
-    return render_template("index.html")
+@app.route("/health", methods=["GET"])
+def health_check():
+    """Lightweight health-check endpoint."""
+    return jsonify({"status": "ok", "service": "FarmScore API"}), 200
 
 
-@app.post("/score")
-def score_farm():
+@app.route("/calculate", methods=["POST"])
+def calculate():
+    """Calculate the FarmScore for a given coordinate.
+
+    **Request body** (JSON)::
+
+        {"lat": 20.29, "lng": 85.83}
+
+    **Response** (JSON)::
+
+        {
+          "score": 220,
+          "grade": "Good",
+          "components": { … },
+          "coordinates": {"lat": 20.29, "lng": 85.83},
+          "elapsed_seconds": 12.4
+        }
     """
-    Accept farm data and return a calculated score.
 
-    Required JSON body fields:
-        - farm_name        (str)
-        - soil_health      (float, 0–10)
-        - water_usage_efficiency (float, 0–10)
-        - biodiversity_score     (float, 0–10)
-        - irrigation_type  (str): drip | sprinkler | flood | rainfed
-        - crop_type        (str)
+    # ---- Parse input -------------------------------------------------------
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"error": "Request body must be valid JSON"}), 400
 
-    Optional:
-        - area_hectares    (float)
-    """
-    data = request.get_json(silent=True)
+    lat = body.get("lat")
+    lng = body.get("lng")
 
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON."}), 400
+    if lat is None or lng is None:
+        return jsonify({"error": "Both 'lat' and 'lng' are required"}), 400
 
-    required_fields = [
-        "farm_name",
-        "soil_health",
-        "water_usage_efficiency",
-        "biodiversity_score",
-        "irrigation_type",
-        "crop_type",
-    ]
-    missing = [f for f in required_fields if f not in data]
-    if missing:
-        return jsonify({"error": f"Missing required fields: {', '.join(missing)}"}), 422
+    try:
+        lat = float(lat)
+        lng = float(lng)
+    except (TypeError, ValueError):
+        return jsonify({"error": "'lat' and 'lng' must be numbers"}), 400
 
-    result = calculate_score(data)
+    if not (-90 <= lat <= 90):
+        return jsonify({"error": f"Latitude out of range: {lat}"}), 400
+    if not (-180 <= lng <= 180):
+        return jsonify({"error": f"Longitude out of range: {lng}"}), 400
 
-    # Persist with a unique ID so the score can be retrieved later
-    record_id = str(uuid.uuid4())
-    score_store[record_id] = result
+    # ---- Fetch satellite data -----------------------------------------------
+    t0 = time.time()
+    logger.info("▶ /calculate  lat=%.5f  lng=%.5f", lat, lng)
 
-    return jsonify({"id": record_id, **result}), 201
+    try:
+        satellite_data = fetch_farm_data(lat, lng)
+    except Exception as exc:
+        logger.exception("Earth Engine fetch failed")
+        return jsonify({
+            "error": "Failed to retrieve satellite data",
+            "detail": str(exc),
+        }), 502
 
+    # ---- Compute score -------------------------------------------------------
+    try:
+        result = calculate_score(
+            ndvi=satellite_data.get("ndvi"),
+            ndmi=satellite_data.get("ndmi"),
+            rainfall=satellite_data.get("rainfall"),
+            temperature=satellite_data.get("temperature"),
+            groundwater=satellite_data.get("groundwater"),
+        )
+    except Exception as exc:
+        logger.exception("Scoring computation failed")
+        return jsonify({
+            "error": "Scoring computation failed",
+            "detail": str(exc),
+        }), 500
 
-@app.get("/score/<record_id>")
-def get_score(record_id: str):
-    """Retrieve a previously calculated score by its ID."""
-    record = score_store.get(record_id)
-    if record is None:
-        return jsonify({"error": "Score record not found."}), 404
-    return jsonify({"id": record_id, **record})
-
-
-@app.get("/scores")
-def list_scores():
-    """Return all stored scores (useful for development/debugging)."""
-    return jsonify(
-        [{"id": k, **v} for k, v in score_store.items()]
+    elapsed = round(time.time() - t0, 2)
+    logger.info(
+        "✓ Score=%d  Grade=%s  elapsed=%.2fs",
+        result["final_score"], result["grade"], elapsed,
     )
 
+    # ---- Return response -----------------------------------------------------
+    return jsonify({
+        "score": result["final_score"],
+        "grade": result["grade"],
+        "components": result["components"],
+        "coordinates": {"lat": lat, "lng": lng},
+        "elapsed_seconds": elapsed,
+    }), 200
 
-# ---------------------------------------------------------------------------
+
+# ===================================================================
+# Error handlers
+# ===================================================================
+
+@app.errorhandler(404)
+def not_found(_):
+    return jsonify({"error": "Endpoint not found"}), 404
+
+
+@app.errorhandler(405)
+def method_not_allowed(_):
+    return jsonify({"error": "Method not allowed"}), 405
+
+
+@app.errorhandler(500)
+def internal_error(_):
+    return jsonify({"error": "Internal server error"}), 500
+
+
+# ===================================================================
 # Entry point
-# ---------------------------------------------------------------------------
+# ===================================================================
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    logger.info("Starting FarmScore API on %s:%d", HOST, PORT)
+    app.run(host=HOST, port=PORT, debug=DEBUG)
